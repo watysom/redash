@@ -98,6 +98,33 @@ class GFKBase:
         self.object_id = value.id
 
 
+class GFKGranteeBase:
+    """
+    'generic foreign key' approach for User and Group
+    """
+
+    grantee_type = Column(db.String(255))
+    grantee_id = Column(db.Integer)
+
+    _grantee = None
+
+    @property
+    def grantee(self):
+        session = object_session(self)
+        if self._grantee or not session:
+            return self._grantee
+        else:
+            grantee_class = _gfk_types[self.grantee_type]
+            self._grantee = session.query(grantee_class).filter(grantee_class.id == self.grantee_id).first()
+            return self._grantee
+
+    @grantee.setter
+    def grantee(self, value):
+        self._grantee = value
+        self.grantee_type = value.__class__.__tablename__
+        self.grantee_id = value.id
+
+
 key_definitions = settings.dynamic_settings.database_key_definitions((db.Integer, {}))
 
 

@@ -15,7 +15,7 @@ from sqlalchemy_utils.models import generic_repr
 from redash import redis_connection
 from redash.utils import dt_from_timestamp, generate_token
 
-from .base import Column, GFKBase, db, key_type, primary_key
+from .base import Column, GFKBase, GFKGranteeBase, db, gfk_type, key_type, primary_key
 from .mixins import BelongsToOrgMixin, TimestampMixin
 from .types import MutableDict, MutableList, json_cast_property
 
@@ -74,6 +74,7 @@ class PermissionsCheckMixin:
         return has_permissions
 
 
+@gfk_type
 @generic_repr("id", "name", "email")
 class User(TimestampMixin, db.Model, BelongsToOrgMixin, UserMixin, PermissionsCheckMixin):
     id = primary_key("User")
@@ -174,6 +175,10 @@ class User(TimestampMixin, db.Model, BelongsToOrgMixin, UserMixin, PermissionsCh
         # TODO: this should be cached.
         return list(itertools.chain(*[g.permissions for g in Group.query.filter(Group.id.in_(self.group_ids))]))
 
+    @property
+    def groups(self):
+        return Group.query.filter(Group.id.in_(self.group_ids)).all()
+
     @classmethod
     def get_by_org(cls, org):
         return cls.query.filter(cls.org == org)
@@ -240,6 +245,7 @@ class User(TimestampMixin, db.Model, BelongsToOrgMixin, UserMixin, PermissionsCh
         return repr(self) if self.is_api_user() else self.email
 
 
+@gfk_type
 @generic_repr("id", "name", "type", "org_id")
 class Group(db.Model, BelongsToOrgMixin):
     DEFAULT_PERMISSIONS = [
@@ -298,15 +304,13 @@ class Group(db.Model, BelongsToOrgMixin):
         return list(result)
 
 
-@generic_repr("id", "object_type", "object_id", "access_type", "grantor_id", "grantee_id")
-class AccessPermission(GFKBase, db.Model):
+@generic_repr("id", "object_type", "object_id", "access_type", "grantor_id", "grantee_type", "grantee_id")
+class AccessPermission(GFKBase, GFKGranteeBase, db.Model):
     id = primary_key("AccessPermission")
     # 'object' defined in GFKBase
     access_type = Column(db.String(255))
     grantor_id = Column(key_type("User"), db.ForeignKey("users.id"))
     grantor = db.relationship(User, backref="grantor", foreign_keys=[grantor_id])
-    grantee_id = Column(key_type("User"), db.ForeignKey("users.id"))
-    grantee = db.relationship(User, backref="grantee", foreign_keys=[grantee_id])
 
     __tablename__ = "access_permissions"
 
@@ -316,7 +320,8 @@ class AccessPermission(GFKBase, db.Model):
             cls.object_type == obj.__tablename__,
             cls.object_id == obj.id,
             cls.access_type == access_type,
-            cls.grantee == grantee,
+            cls.grantee_type == grantee.__tablename__,
+            cls.grantee_id == grantee.id,
             cls.grantor == grantor,
         ).one_or_none()
 
@@ -325,7 +330,8 @@ class AccessPermission(GFKBase, db.Model):
                 object_type=obj.__tablename__,
                 object_id=obj.id,
                 access_type=access_type,
-                grantee=grantee,
+                grantee_type=grantee.__tablename__,
+                grantee_id=grantee.id,
                 grantor=grantor,
             )
             db.session.add(grant)
@@ -353,7 +359,9 @@ class AccessPermission(GFKBase, db.Model):
             q = q.filter(AccessPermission.access_type == access_type)
 
         if grantee:
-            q = q.filter(AccessPermission.grantee == grantee)
+            q = q.filter(
+                AccessPermission.grantee_id == grantee.id, AccessPermission.grantee_type == grantee.__tablename__
+            )
 
         if grantor:
             q = q.filter(AccessPermission.grantor == grantor)
@@ -367,6 +375,7 @@ class AccessPermission(GFKBase, db.Model):
             "object_type": self.object_type,
             "access_type": self.access_type,
             "grantor": self.grantor_id,
+            "grantee_type": self.grantee_type,
             "grantee": self.grantee_id,
         }
         return d

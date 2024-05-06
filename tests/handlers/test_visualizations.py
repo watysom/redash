@@ -66,7 +66,7 @@ class VisualizationResourceTest(BaseTestCase):
         self.make_request(
             "post",
             "/api/queries/{}/acl".format(query.id),
-            data={"access_type": "modify", "user_id": other_user.id},
+            data={"access_type": "modify", "grantee_type": other_user.__tablename__, "grantee_id": other_user.id},
         )
         rv = self.make_request("post", "/api/visualizations", data=data, user=other_user)
         self.assertEqual(rv.status_code, 200)
@@ -97,7 +97,7 @@ class VisualizationResourceTest(BaseTestCase):
         self.make_request(
             "post",
             "/api/queries/{}/acl".format(vis.query_id),
-            data={"access_type": "modify", "user_id": other_user.id},
+            data={"access_type": "modify", "grantee_type": other_user.__tablename__, "grantee_id": other_user.id},
         )
         rv = self.make_request("post", path, user=other_user, data=data)
         self.assertEqual(rv.status_code, 200)
@@ -131,7 +131,7 @@ class VisualizationResourceTest(BaseTestCase):
         self.make_request(
             "post",
             "/api/queries/{}/acl".format(vis.query_id),
-            data={"access_type": "modify", "user_id": other_user.id},
+            data={"access_type": "modify", "grantee_type": other_user.__tablename__, "grantee_id": other_user.id},
         )
 
         rv = self.make_request("delete", path, user=other_user)
